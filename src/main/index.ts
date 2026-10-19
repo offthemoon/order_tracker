@@ -5,6 +5,9 @@ import * as store from './store'
 import { diagnose, syncAll, testConnection } from './imap'
 import { removeAccount, setStatuses } from './parser'
 
+// saved passwords don't change. What people see comes from productName.
+app.setName('order-tracker')
+
 // The app loads only local files, so Chromium's HTTP disk cache is pointless; turning it
 // off also stops the "Failing CreateMapBlock / Failed to save user data" noise on Windows.
 app.commandLine.appendSwitch('disable-http-cache')

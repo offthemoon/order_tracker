@@ -28,7 +28,7 @@ export interface ParsedEmail {
  * Bump whenever detection rules change. Sync keys its "already scanned" cache
  * on this, so every inbox is re-checked once with the new rules (no Reset needed).
  */
-export const PARSER_VERSION = 4
+export const PARSER_VERSION = 5
 
 /** Cheap subject filter so sync only downloads full bodies of likely order emails. */
 export const SUBJECT_HINT = /order|ship|deliver|cancel|refund|return|package|purchase|receipt|track|arriv|dispatch|confirm|thank|invoice|on (?:its|the) way|out for/i
@@ -105,9 +105,27 @@ function findOrderNumber(subject: string, body: string): { orderNumber: string; 
 }
 
 // ---------- tracking ----------
+/**
+ * UPS numbers are 1Z + 6-char shipper code + 10 digits, the last a check digit.
+ * Emails are full of random link IDs that also start with "1z", so require both.
+ */
+export function isValidUps(n: string): boolean {
+  if (!/^1Z[0-9A-Z]{6}\d{10}$/.test(n)) return false
+  const body = n.slice(2)
+  let sum = 0
+  for (let i = 0; i < 15; i++) {
+    const c = body[i]
+    const v = /\d/.test(c) ? Number(c) : (c.charCodeAt(0) - 63) % 10 // A=2, B=3 … (UPS letter values)
+    sum += i % 2 ? v * 2 : v
+  }
+  return (10 - (sum % 10)) % 10 === Number(body[15])
+}
+
 export function extractTracking(text: string): { trackingNumber: string; carrier: string } | null {
-  const ups = text.match(/\b(1Z[0-9A-Z]{16})\b/i)
-  if (ups) return { trackingNumber: ups[1].toUpperCase(), carrier: 'UPS' }
+  for (const m of text.matchAll(/\b(1Z[0-9A-Z]{6}\d{10})\b/gi)) {
+    const n = m[1].toUpperCase()
+    if (isValidUps(n)) return { trackingNumber: n, carrier: 'UPS' }
+  }
   const usps = text.match(/\b(9[2345]\d{18,24})\b/)
   if (usps) return { trackingNumber: usps[1], carrier: 'USPS' }
   const amzl = text.match(/\b(TBA\d{9,15})\b/)
@@ -294,4 +312,16 @@ export function repairOrderNumbers(orders: Order[]): Order[] {
     if (!prev.manual) prev.status = currentStatus(prev.events)
   }
   return [...map.values()].sort((a, b) => b.lastUpdate.localeCompare(a.lastUpdate))
+}
+
+/**
+ * Drop UPS numbers saved by older parsers that fail the format/check-digit test
+ * (random link IDs). The next sync re-reads the emails and fills in the real one.
+ * Returns the input array when nothing changed.
+ */
+export function repairTracking(orders: Order[]): Order[] {
+  if (!orders.some(o => o.carrier === 'UPS' && o.trackingNumber && !isValidUps(o.trackingNumber))) return orders
+  return orders.map(o => (o.carrier === 'UPS' && o.trackingNumber && !isValidUps(o.trackingNumber)
+    ? { ...o, trackingNumber: undefined, carrier: undefined }
+    : o))
 }

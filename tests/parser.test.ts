@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseEmail, mergeIntoOrders, removeAccount, setStatuses, cleanOrderNumber, repairOrderNumbers, explainEmail, SUBJECT_HINT, detectStatus, extractRetailer, extractItemCount, type RawEmail } from '../src/main/parser'
+import { parseEmail, mergeIntoOrders, removeAccount, setStatuses, cleanOrderNumber, repairOrderNumbers, explainEmail, SUBJECT_HINT, detectStatus, extractRetailer, extractItemCount, extractTracking, repairTracking, type RawEmail } from '../src/main/parser'
 
 const mk = (over: Partial<RawEmail>): RawEmail => ({
   messageId: Math.random().toString(36),
@@ -269,4 +269,27 @@ test('item count: order keeps the largest count across its emails', () => {
   const [o] = mergeIntoOrders([], [conf, part, none])
   assert.equal(o.items, 5)
   assert.equal(mergeIntoOrders([], [part])[0].items, 2)
+})
+
+test('UPS: random link IDs starting with 1z are not tracking numbers', () => {
+  // The bogus number from a real Pokémon Center shipping email, as it might appear in a link.
+  const body = 'Track: https://click.em.pokemoncenter.com/?qs=1zsr8fsemcmnixv7ap&x=1\nTracking Number: 9400111899223344556677'
+  assert.deepEqual(extractTracking(body), { trackingNumber: '9400111899223344556677', carrier: 'USPS' })
+  assert.equal(extractTracking('ref 1ZSR8FSEMCMNIXV7AP'), null)
+  // Right shape, wrong check digit.
+  assert.equal(extractTracking('UPS 1Z999AA10123456785'), null)
+  // A real one still works, even lower-case inside a UPS link.
+  assert.deepEqual(extractTracking('https://www.ups.com/track?tracknum=1z999aa10123456784'), { trackingNumber: '1Z999AA10123456784', carrier: 'UPS' })
+})
+
+test('repairTracking clears bad saved UPS numbers and leaves good ones', () => {
+  const tgt = { fromName: 'Target', fromAddress: 'orders@oe.target.com' }
+  const good = parseEmail(mk({ ...tgt, messageId: 'u1', subject: 'Your order #A60001 has shipped', text: 'UPS 1Z999AA10123456784' }))!
+  const other = parseEmail(mk({ ...tgt, messageId: 'u2', subject: 'Your order #A60002 has shipped' }))!
+  let orders = mergeIntoOrders([], [good, other])
+  assert.equal(repairTracking(orders), orders) // no-op when clean
+  orders = orders.map(o => (o.orderNumber === 'A60002' ? { ...o, trackingNumber: '1ZSR8FSEMCMNIXV7AP', carrier: 'UPS' } : o))
+  const fixed = repairTracking(orders)
+  assert.equal(fixed.find(o => o.orderNumber === 'A60002')!.trackingNumber, undefined)
+  assert.equal(fixed.find(o => o.orderNumber === 'A60001')!.trackingNumber, '1Z999AA10123456784')
 })

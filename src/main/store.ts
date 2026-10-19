@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
 import { basename, join } from 'path'
 import type { ImapAccount, Order, PublicAccount } from '../shared/types'
-import { repairOrderNumbers } from './parser'
+import { repairOrderNumbers, repairTracking } from './parser'
 
 interface StoredAccount extends Omit<ImapAccount, 'password'> {
   /** base64 of safeStorage-encrypted password (OS keychain-backed). */
@@ -82,8 +82,8 @@ async function load(): Promise<DB> {
     delete cache.settings
     await save()
   }
-  // Fix order numbers saved by older parser versions (merges split orders).
-  const repaired = repairOrderNumbers(cache.orders)
+  // Fix order numbers and bogus UPS tracking numbers saved by older parser versions.
+  const repaired = repairTracking(repairOrderNumbers(cache.orders))
   if (repaired !== cache.orders) {
     cache.orders = repaired
     await save()

@@ -168,6 +168,9 @@ tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 .spend-stores li { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .spend-tile { width: 52px; height: 52px; flex-shrink: 0; border-radius: 12px; display: grid; place-items: center; font-size: 22px; font-weight: 800; color: #fff;
   box-shadow: inset 0 0 0 1px #ffffff26, 0 6px 18px #0006; }
+/* Picture tiles: white to match the image's background, zoomed past its empty margins. */
+.spend-tile.has-img { background: #fff; overflow: hidden; }
+.spend-tile.has-img img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.3); }
 .spend-store { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
 .spend-store-name { font-size: 12px; color: #c9c3e6; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .spend-store-n { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Order } from '@shared/types'
 import { parseMoney } from '../status'
 import logo from '../assets/summit.svg'
+import pokemonCenterImg from '../assets/stores/pokemon-center.png'
 
 interface Props {
   /** Orders already narrowed by the dashboard's date range and account filter. */
@@ -19,6 +20,12 @@ const STORE_COLORS: Record<string, string> = {
   'amazon': '#e88a00',
   'best buy': '#0046be'
 }
+// Pictures shown in place of the letter tile.
+const STORE_IMAGES: Record<string, string> = {
+  'pokémon center': pokemonCenterImg,
+  'pokemon center': pokemonCenterImg
+}
+
 const storeColor = (name: string) => {
   const known = STORE_COLORS[name.toLowerCase()]
   if (known) return known
@@ -110,7 +117,11 @@ export default function SummaryCard({ orders, rangeLabel, onClose }: Props) {
               const [n, unit] = s.items > 0 ? [s.items, 'item'] : [s.orders, 'order']
               return (
                 <li key={store}>
-                  <span className="spend-tile" style={{ background: storeColor(store) }}>{store.replace(/[^A-Za-z0-9]/g, '')[0]?.toUpperCase() ?? '?'}</span>
+                  {STORE_IMAGES[store.toLowerCase()] ? (
+                    <span className="spend-tile has-img"><img src={STORE_IMAGES[store.toLowerCase()]} alt="" /></span>
+                  ) : (
+                    <span className="spend-tile" style={{ background: storeColor(store) }}>{store.replace(/[^A-Za-z0-9]/g, '')[0]?.toUpperCase() ?? '?'}</span>
+                  )}
                   <span className="spend-store">
                     <span className="spend-store-name" title={store}>{store}</span>
                     <span className="spend-store-n">{n}</span>
