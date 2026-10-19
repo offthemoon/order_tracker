@@ -2,6 +2,10 @@
 
 Electron + TypeScript + React desktop app that reads order emails over IMAP and shows a dashboard of every order's status: ordered, shipped, out for delivery, delivered, cancelled, returned, plus "still active" (anything not delivered/cancelled/returned).
 
+
+<img width="746" height="855" alt="image" src="https://github.com/user-attachments/assets/f7564600-533d-4849-bae8-e3b776662697" />
+
+
 ## Run
 
 ```bash
