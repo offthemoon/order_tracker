@@ -36,8 +36,8 @@ const loadReveal = (): boolean => {
   try { return localStorage.getItem(REVEAL_KEY) === '1' } catch { return false }
 }
 
-/** Covers all but the last 4 characters: "912003456789" -> "••••6789". */
-const maskOrderNumber = (n: string) => (n.length > 4 ? '••••' + n.slice(-4) : '•'.repeat(n.length))
+/** Covers all but the last 2 characters: "912003456789" -> "••••89". */
+const maskOrderNumber = (n: string) => (n.length > 2 ? '••••' + n.slice(-2) : '•'.repeat(n.length))
 
 interface Props {
   orders: Order[]

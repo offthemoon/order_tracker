@@ -39,7 +39,7 @@ IMAP (imapflow) ──► subject prefilter ──► full fetch + mailparser �
 ## Dashboard
 
 - **Date range:** Today · This week (since Sunday) · This month · All time, by order date. Tiles, Active value and the table all follow it; the choice is remembered, and a notice shows how many orders it's hiding.
-- **Order numbers are covered** (`••••6789`) by default, including in the timeline's email subjects. The **Order #s** toggle (eye icon) in the toolbar reveals them all; the choice is remembered. Search still matches the full number.
+- **Order numbers are covered** (`••••89`) by default, including in the timeline's email subjects. The **Order #s** toggle (eye icon) in the toolbar reveals them all; the choice is remembered. Search still matches the full number.
 - KPI tiles double as filters. "Still active" flags orders with no update in 14+ days.
 - **Bulk edit:** tick the checkboxes (shift-click for a range, header box for all visible rows), then pick a status and **Apply**, or **Remove**. *Auto (from emails)* drops manual overrides and goes back to what the emails say.
 - Click an order for its timeline, a carrier tracking link, and a status override. Manual statuses are marked with `•` and won't be overwritten by future syncs.
