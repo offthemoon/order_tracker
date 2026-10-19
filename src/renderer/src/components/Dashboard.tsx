@@ -30,6 +30,15 @@ const loadRange = (): Range => {
   } catch { return 'all' }
 }
 
+// Order numbers are covered unless the user has chosen to show them.
+const REVEAL_KEY = 'order-tracker.revealOrderNumbers'
+const loadReveal = (): boolean => {
+  try { return localStorage.getItem(REVEAL_KEY) === '1' } catch { return false }
+}
+
+/** Covers all but the last 4 characters: "912003456789" -> "••••6789". */
+const maskOrderNumber = (n: string) => (n.length > 4 ? '••••' + n.slice(-4) : '•'.repeat(n.length))
+
 interface Props {
   orders: Order[]
   accounts: PublicAccount[]
@@ -49,7 +58,16 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
   const [range, setRangeState] = useState<Range>(loadRange)
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkStatus, setBulkStatus] = useState<OrderStatus | 'auto' | ''>('')
+  const [reveal, setRevealState] = useState<boolean>(loadReveal)
   const lastClicked = useRef<string | null>(null)
+
+  const setReveal = (v: boolean) => {
+    setRevealState(v)
+    try { localStorage.setItem(REVEAL_KEY, v ? '1' : '0') } catch { /* storage unavailable: fine */ }
+  }
+  const num = (n: string) => (reveal ? n : maskOrderNumber(n))
+  // Email subjects usually repeat the order number, so cover it there too.
+  const subj = (s: string, n: string) => (reveal || !n ? s : s.split(n).join(maskOrderNumber(n)))
 
   const multi = accounts.length > 1
   const userOf = (id: string) => accounts.find(a => a.id === id)?.user ?? 'removed account'
@@ -164,7 +182,10 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
               {accounts.map(a => <option key={a.id} value={a.id}>{a.user}</option>)}
             </select>
           )}
-          <input className="search" placeholder="Search order #, store, tracking…" value={q} onChange={e => setQ(e.target.value)} />
+          <button className={`toggle ${reveal ? 'on' : ''}`} aria-pressed={reveal} title={reveal ? 'Cover order numbers' : 'Show full order numbers'} onClick={() => setReveal(!reveal)}>
+            <EyeIcon open={reveal} />Order #s
+          </button>
+          <input className="search"placeholder="Search order #, store, tracking…" value={q} onChange={e => setQ(e.target.value)} />
         </div>
       </div>
 
@@ -208,10 +229,10 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
                 {shown.map(o => (
                   <tr key={o.id} className={`${o.id === selected ? 'sel' : ''} ${checked.has(o.id) ? 'picked' : ''}`} onClick={() => setSelected(o.id)}>
                     <td className="cb" onClick={e => { e.stopPropagation(); toggle(o.id, e.shiftKey) }}>
-                      <input type="checkbox" aria-label={`Select ${o.orderNumber}`} checked={checked.has(o.id)} readOnly />
+                      <input type="checkbox" aria-label={`Select ${num(o.orderNumber)}`} checked={checked.has(o.id)} readOnly />
                     </td>
                     <td className="store">{o.retailer}</td>
-                    <td className="mono">{o.orderNumber}</td>
+                    <td className="mono">{num(o.orderNumber)}</td>
                     <td><Badge s={o.status} manual={o.manual} /></td>
                     <td>{fmtDate(o.firstSeen)}</td>
                     <td className="muted">{daysAgo(o.lastUpdate)}</td>
@@ -230,7 +251,7 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
             <div className="detail-head">
               <div>
                 <div className="muted small">{sel.retailer}</div>
-                <div className="mono big">{sel.orderNumber}</div>
+                <div className="mono big">{num(sel.orderNumber)}</div>
               </div>
               <button className="x" onClick={() => setSelected(null)}>×</button>
             </div>
@@ -256,7 +277,7 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
                   <span className="dot" style={{ background: STATUS_META[ev.status].color }} />
                   <div>
                     <div><strong>{STATUS_META[ev.status].label}</strong> <span className="muted small">{fmtDate(ev.date)}</span></div>
-                    <div className="muted small">{ev.subject}</div>
+                    <div className="muted small">{subj(ev.subject, sel.orderNumber)}</div>
                   </div>
                 </li>
               ))}
@@ -279,6 +300,16 @@ function Kpi({ label, value, accent, sub, subMuted, wide, onClick, active }: {
       <span className="kpi-value">{value}</span>
       {sub && <span className={`kpi-sub ${subMuted ? 'muted' : ''}`}>{sub}</span>}
     </button>
+  )
+}
+
+function EyeIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+      {!open && <line x1="3" y1="3" x2="21" y2="21" />}
+    </svg>
   )
 }
 
