@@ -39,7 +39,7 @@ export default function Accounts({ accounts, orders, onAccountsChange, onDeleted
         <h1>Email accounts</h1>
         {onDone && accounts.length > 0 && <button className="ghost" onClick={onDone}>Back to dashboard</button>}
       </div>
-      <p className="muted">Order Tracker reads order, shipping and cancellation emails over IMAP from every account below. It only reads; it never sends, moves or deletes mail. Passwords are encrypted with your OS keychain.</p>
+      <p className="muted">Summit Order Tracking reads order, shipping and cancellation emails over IMAP from every account below. It only reads; it never sends, moves or deletes mail. Passwords are encrypted with your OS keychain.</p>
 
       {accounts.length > 0 && (
         <ul className="acct-list">

@@ -18,6 +18,7 @@ export interface ParsedEmail {
   subject: string
   messageId: string
   total?: string
+  items?: number
   trackingNumber?: string
   carrier?: string
   account?: string
@@ -27,7 +28,7 @@ export interface ParsedEmail {
  * Bump whenever detection rules change. Sync keys its "already scanned" cache
  * on this, so every inbox is re-checked once with the new rules (no Reset needed).
  */
-export const PARSER_VERSION = 3
+export const PARSER_VERSION = 4
 
 /** Cheap subject filter so sync only downloads full bodies of likely order emails. */
 export const SUBJECT_HINT = /order|ship|deliver|cancel|refund|return|package|purchase|receipt|track|arriv|dispatch|confirm|thank|invoice|on (?:its|the) way|out for/i
@@ -126,6 +127,17 @@ export function extractTotal(text: string): string | undefined {
   return m ? `$${m[1]}` : undefined
 }
 
+/** Stores whose emails list one "Qty: N" line per product. */
+const ITEM_COUNT_RETAILERS = /^(?:target|pok[eé]mon center)$/i
+
+/** Total quantity across the email's product lines, or undefined if it lists none. */
+export function extractItemCount(retailer: string, text: string): number | undefined {
+  if (!ITEM_COUNT_RETAILERS.test(retailer)) return undefined
+  let sum = 0
+  for (const m of text.matchAll(/\b(?:qty|quantity)\s*:?\s*(\d{1,3})\b/gi)) sum += Number(m[1])
+  return sum || undefined
+}
+
 const GENERIC_SENDER = /^(no-?reply|do-?not-?reply|orders?|shipping|ship-confirm|auto-confirm|notifications?|info|support|updates?|store-news|mail|email)$/i
 
 export function extractRetailer(fromName: string, fromAddress: string): string {
@@ -173,6 +185,7 @@ export function explainEmail(e: RawEmail): Explanation {
     subject: e.subject,
     messageId: e.messageId,
     total: extractTotal(body),
+    items: extractItemCount(retailer, body),
     trackingNumber: tracking?.trackingNumber,
     carrier: tracking?.carrier
   }
@@ -216,6 +229,8 @@ export function mergeIntoOrders(existing: Order[], parsed: ParsedEmail[]): Order
     if (p.date < o.firstSeen) o.firstSeen = p.date
     if (p.date > o.lastUpdate) o.lastUpdate = p.date
     o.total ??= p.total
+    // Shipping emails for a split order list only part of it: keep the largest count seen.
+    if (p.items) o.items = Math.max(o.items ?? 0, p.items)
     if (p.trackingNumber) { o.trackingNumber = p.trackingNumber; o.carrier = p.carrier }
     if (!o.manual) o.status = currentStatus(o.events)
   }
@@ -273,6 +288,7 @@ export function repairOrderNumbers(orders: Order[]): Order[] {
     prev.firstSeen = prev.events[0].date
     prev.lastUpdate = prev.events[prev.events.length - 1].date
     prev.total ??= o.total
+    if (o.items) prev.items = Math.max(prev.items ?? 0, o.items)
     if (!prev.trackingNumber && o.trackingNumber) { prev.trackingNumber = o.trackingNumber; prev.carrier = o.carrier }
     if (o.manual && !prev.manual) { prev.manual = true; prev.status = o.status }
     if (!prev.manual) prev.status = currentStatus(prev.events)

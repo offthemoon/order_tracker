@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { CLOSED_STATUSES, type Order, type OrderStatus, type PublicAccount } from '@shared/types'
+import SummaryCard from './SummaryCard'
 import { STATUS_META, STATUS_ORDER, daysAgo, fmtDate, fmtMoney, parseMoney, trackingUrl } from '../status'
 
 type Filter = 'all' | 'active' | OrderStatus
@@ -59,6 +60,7 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [bulkStatus, setBulkStatus] = useState<OrderStatus | 'auto' | ''>('')
   const [reveal, setRevealState] = useState<boolean>(loadReveal)
+  const [showSummary, setShowSummary] = useState(false)
   const lastClicked = useRef<string | null>(null)
 
   const setReveal = (v: boolean) => {
@@ -182,6 +184,9 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
               {accounts.map(a => <option key={a.id} value={a.id}>{a.user}</option>)}
             </select>
           )}
+          <button className={`toggle ${showSummary ? 'on' : ''}`} aria-haspopup="dialog" title="Total spent and top stores for this range" onClick={() => setShowSummary(true)}>
+            <ChartIcon />Summary
+          </button>
           <button className={`toggle ${reveal ? 'on' : ''}`} aria-pressed={reveal} title={reveal ? 'Cover order numbers' : 'Show full order numbers'} onClick={() => setReveal(!reveal)}>
             <EyeIcon open={reveal} />Order #s
           </button>
@@ -215,6 +220,8 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
           </div>
         </div>
       )}
+
+      {showSummary && <SummaryCard orders={orders} rangeLabel={RANGES.find(r => r.id === range)!.label} onClose={() => setShowSummary(false)} />}
 
       <div className="main">
         <div className="tablewrap">
@@ -265,6 +272,7 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
             <dl>
               <dt>Ordered</dt><dd>{fmtDate(sel.firstSeen)}</dd>
               <dt>Total</dt><dd>{sel.total ?? '—'}</dd>
+              {sel.items !== undefined && <><dt>Items</dt><dd>{sel.items}</dd></>}
               {multi && <><dt>Found in</dt><dd>{(sel.accounts ?? []).map(userOf).join(', ')}</dd></>}
               <dt>Tracking</dt>
               <dd>{sel.trackingNumber ? <a href={trackingUrl(sel.carrier, sel.trackingNumber)!} target="_blank" rel="noreferrer">{sel.carrier} {sel.trackingNumber}</a> : '—'}</dd>
@@ -300,6 +308,16 @@ function Kpi({ label, value, accent, sub, subMuted, wide, onClick, active }: {
       <span className="kpi-value">{value}</span>
       {sub && <span className={`kpi-sub ${subMuted ? 'muted' : ''}`}>{sub}</span>}
     </button>
+  )
+}
+
+function ChartIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="12" x2="15" y2="12" />
+      <line x1="4" y1="18" x2="10" y2="18" />
+    </svg>
   )
 }
 

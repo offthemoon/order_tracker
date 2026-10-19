@@ -17,6 +17,7 @@ const api: Api = {
   getStoreNotice: () => ipcRenderer.invoke('store:notice'),
   openDataFolder: () => ipcRenderer.invoke('store:openFolder'),
   addFolder: (id, folder) => ipcRenderer.invoke('accounts:addFolder', id, folder),
+  copyImage: rect => ipcRenderer.invoke('clipboard:copyImage', rect),
   onSyncProgress: cb => {
     const h = (_e: unknown, p: SyncProgress) => cb(p)
     ipcRenderer.on('sync:progress', h)

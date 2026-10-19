@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import type { ImapAccount, OrderStatus } from '../shared/types'
 import * as store from './store'
@@ -21,6 +21,9 @@ app.on('second-instance', () => {
   win.focus()
 })
 
+// App icon for the window (Windows/Linux) and the Dock (macOS). Path works from out/main.
+const ICON = join(__dirname, '../../resources/icon.png')
+
 let win: BrowserWindow | null = null
 let syncing = false
 
@@ -30,8 +33,9 @@ function createWindow(): void {
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    title: 'Order Tracker',
+    title: 'Summit Order Tracking',
     backgroundColor: '#0f1115',
+    icon: ICON,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -96,12 +100,24 @@ ipcMain.handle('orders:delete', async (_e, id: string) => {
   await store.setOrders(orders)
   return orders
 })
+ipcMain.handle('clipboard:copyImage', async (_e, r: { x: number; y: number; width: number; height: number }) => {
+  if (!win) throw new Error('No window.')
+  if (![r?.x, r?.y, r?.width, r?.height].every(Number.isFinite) || r.width <= 0 || r.height <= 0) throw new Error('Bad area.')
+  // The renderer measures in CSS pixels; capturePage wants window pixels, which differ when zoomed.
+  const z = win.webContents.getZoomFactor()
+  const image = await win.webContents.capturePage({
+    x: Math.round(r.x * z), y: Math.round(r.y * z), width: Math.round(r.width * z), height: Math.round(r.height * z)
+  })
+  clipboard.writeImage(image)
+})
 ipcMain.handle('orders:clear', async () => {
   await store.clearAll()
   return []
 })
 
 app.whenReady().then(() => {
+  // macOS ignores the window icon; without this the Dock shows the default Electron one.
+  if (process.platform === 'darwin') app.dock?.setIcon(ICON)
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

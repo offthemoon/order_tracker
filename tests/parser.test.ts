@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseEmail, mergeIntoOrders, removeAccount, setStatuses, cleanOrderNumber, repairOrderNumbers, explainEmail, SUBJECT_HINT, detectStatus, extractRetailer, type RawEmail } from '../src/main/parser'
+import { parseEmail, mergeIntoOrders, removeAccount, setStatuses, cleanOrderNumber, repairOrderNumbers, explainEmail, SUBJECT_HINT, detectStatus, extractRetailer, extractItemCount, type RawEmail } from '../src/main/parser'
 
 const mk = (over: Partial<RawEmail>): RawEmail => ({
   messageId: Math.random().toString(36),
@@ -225,4 +225,48 @@ test('target "about to ship" with tracking is shipped, and re-check fixes an exi
   assert.equal(parseEmail(mk({ subject: 'Update on your order #A55501', text: 'Your UPS tracking: 1Z999AA10123456784' }))?.status, 'shipped')
   // Confirmation without tracking stays ordered.
   assert.equal(parseEmail(mk({ subject: 'Thanks for your order #A55502', text: 'We will email tracking info when it ships.' }))?.status, 'ordered')
+})
+
+// Copied from a real Pokémon Center confirmation: four products, one each.
+const PKC_ITEMS = `
+Order Summary
+Pokémon TCG: 30th Celebration Mini Tin – Pikachu (Night)
+SKU #: 10-10465-172
+Qty: 1
+Price: $9.99
+Pokémon TCG: 30th Celebration Mini Tin – Umbreon (Night)
+SKU #: 10-10465-173
+Qty: 1
+Price: $9.99
+Pokémon TCG: 30th Celebration Mini Tin – Pikachu (Day)
+SKU #: 10-10465-167
+Qty: 1
+Price: $9.99
+Pokémon TCG: 30th Celebration Mini Tin – Espeon (Day)
+SKU #: 10-10465-168
+Qty: 1
+Price: $9.99`
+
+test('item count: Pokémon Center sums Qty lines', () => {
+  const pkc = { fromName: 'Pokémon Center', fromAddress: 'orders@em.pokemoncenter.com' }
+  const p = parseEmail(mk({ ...pkc, subject: 'Thanks for shopping at Pokémon Center!', text: 'Order Number: P001234567\n' + PKC_ITEMS }))
+  assert.equal(p?.items, 4)
+  assert.equal(p?.orderNumber, 'P001234567') // SKU lines aren't mistaken for the order number
+  assert.equal(extractItemCount('Pokémon Center', 'Qty: 2\nQty: 3'), 5)
+})
+
+test('item count: Target, other stores, and emails with no quantities', () => {
+  assert.equal(extractItemCount('Target', 'Item A Qty: 2 $5.00 Item B Quantity: 1 $3.00'), 3)
+  assert.equal(extractItemCount('Amazon', 'Qty: 2'), undefined)
+  assert.equal(extractItemCount('Target', 'Your order is on its way'), undefined)
+})
+
+test('item count: order keeps the largest count across its emails', () => {
+  const tgt = { fromName: 'Target', fromAddress: 'orders@oe.target.com' }
+  const conf = parseEmail(mk({ ...tgt, messageId: 'i1', subject: 'Order #912003456789 confirmed', text: 'Qty: 2\nQty: 3', date: new Date('2026-10-01') }))!
+  const part = parseEmail(mk({ ...tgt, messageId: 'i2', subject: 'Items from order #912003456789 have shipped', text: 'Qty: 2', date: new Date('2026-10-03') }))!
+  const none = parseEmail(mk({ ...tgt, messageId: 'i3', subject: 'Items have arrived from order 912003456789', date: new Date('2026-10-05') }))!
+  const [o] = mergeIntoOrders([], [conf, part, none])
+  assert.equal(o.items, 5)
+  assert.equal(mergeIntoOrders([], [part])[0].items, 2)
 })

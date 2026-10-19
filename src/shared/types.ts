@@ -48,6 +48,8 @@ export interface Order {
   firstSeen: string   // ISO
   lastUpdate: string  // ISO
   total?: string
+  /** Number of items, for stores whose emails list quantities. */
+  items?: number
   trackingNumber?: string
   carrier?: string
   /** True when the user set the status by hand; sync won't overwrite it. */
@@ -124,5 +126,7 @@ export interface Api {
   getStoreNotice(): Promise<string | null>
   openDataFolder(): Promise<string>
   addFolder(accountId: string, folder: string): Promise<PublicAccount[]>
+  /** Screenshots this part of the window (CSS pixels) to the clipboard. */
+  copyImage(rect: { x: number; y: number; width: number; height: number }): Promise<void>
   onSyncProgress(cb: (p: SyncProgress) => void): () => void
 }

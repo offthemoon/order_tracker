@@ -3,6 +3,7 @@ import type { Order, OrderStatus, PublicAccount, SyncProgress } from '@shared/ty
 import Accounts from './components/Accounts'
 import Dashboard from './components/Dashboard'
 import FindMissing from './components/FindMissing'
+import logo from './assets/summit.svg'
 
 type View = 'loading' | 'accounts' | 'dashboard' | 'find'
 
@@ -59,7 +60,7 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <div className="brand"><span className="logo">◧</span> Order Tracker</div>
+        <div className="brand"><img className="logo" src={logo} alt="" /> Summit Order Tracking</div>
         {view === 'dashboard' && (
           <div className="head-actions">
             <span className="muted small" title={accounts.map(a => a.user).join('\n')}>

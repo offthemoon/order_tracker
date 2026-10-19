@@ -12,7 +12,7 @@ button, input, select { font: inherit; color: inherit; }
 
 header { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--line); }
 .brand { font-weight: 600; font-size: 15px; display: flex; gap: 8px; align-items: center; }
-.logo { color: var(--primary); font-size: 18px; }
+.logo { width: 24px; height: 24px; display: block; }
 .head-actions { display: flex; gap: 8px; align-items: center; }
 .head-actions > .muted { margin-right: 8px; }
 
@@ -132,3 +132,47 @@ tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 .toggle { display: inline-flex; align-items: center; gap: 6px; background: var(--panel); color: var(--muted); padding: 8px 12px; white-space: nowrap; }
 .toggle:hover { color: var(--text); }
 .toggle.on { background: var(--panel2); color: var(--text); }
+
+/* spending summary card (modal) */
+.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: #05060acc; backdrop-filter: blur(4px); animation: fade .15s ease-out; }
+.spend-card {
+  position: relative; width: min(460px, 100%); aspect-ratio: 1; overflow: hidden; outline: none;
+  display: flex; flex-direction: column; padding: 22px 26px; border-radius: 18px;
+  border: 1px solid #ffffff14; box-shadow: 0 30px 80px #000a;
+  background:
+    radial-gradient(120% 70% at 50% 42%, #6d3fd655 0%, transparent 60%),
+    radial-gradient(60% 50% at 85% 0%, #e0506033 0%, transparent 70%),
+    radial-gradient(70% 60% at 0% 100%, #3c46c855 0%, transparent 70%),
+    linear-gradient(160deg, #1b1630 0%, #110f1e 55%, #0b0a14 100%);
+  animation: pop .18s ease-out;
+}
+/* faint grid for texture */
+.spend-card::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: linear-gradient(#ffffff07 1px, transparent 1px), linear-gradient(90deg, #ffffff07 1px, transparent 1px);
+  background-size: 28px 28px; mask-image: radial-gradient(circle at 50% 45%, #000 0%, transparent 75%); }
+.spend-card > * { position: relative; }
+.spend-top { display: flex; justify-content: space-between; align-items: center; }
+.spend-actions { display: flex; align-items: center; gap: 6px; }
+.spend-copy { font-size: 12px; padding: 5px 10px; background: #ffffff10; border-color: #ffffff1f; color: #ddd8f5; }
+.spend-copy:hover:not(:disabled) { background: #ffffff1c; }
+/* While copying: no buttons in the picture, and square corners so the backdrop doesn't show. */
+.spend-card.capturing { border-radius: 0; animation: none; }
+.spend-card.capturing .spend-actions { visibility: hidden; }
+.spend-brand { display: flex; gap: 8px; align-items: center; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 13px; }
+.spend-hero { margin: auto 0 0; text-align: center; padding-top: 12px; }
+.spend-label { color: #c9c3e6; font-size: 15px; }
+.spend-value { font-size: 64px; font-weight: 800; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #fff 30%, #b9b3d6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.spend-note { color: #f0b429; font-size: 12px; margin-top: 4px; }
+.spend-stores { list-style: none; margin: 26px 0 auto; padding: 0; display: flex; justify-content: center; gap: 22px; flex-wrap: wrap; }
+.spend-stores li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.spend-tile { width: 52px; height: 52px; flex-shrink: 0; border-radius: 12px; display: grid; place-items: center; font-size: 22px; font-weight: 800; color: #fff;
+  box-shadow: inset 0 0 0 1px #ffffff26, 0 6px 18px #0006; }
+.spend-store { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
+.spend-store-name { font-size: 12px; color: #c9c3e6; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spend-store-n { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.spend-store-unit { font-size: 12px; color: #a49fc0; }
+.spend-empty { margin: 26px 0 auto; text-align: center; color: #a49fc0; }
+.spend-foot { text-align: center; color: #8d88a8; font-size: 12px; padding-top: 12px; border-top: 1px solid #ffffff12; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { opacity: 0; transform: scale(.96); } }

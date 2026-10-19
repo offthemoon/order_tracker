@@ -32,7 +32,7 @@ const isMissing = (e: unknown) => (e as NodeJS.ErrnoException)?.code === 'ENOENT
 
 async function readDB(path: string): Promise<DB> {
   const db = JSON.parse(await fs.readFile(path, 'utf8')) as DB
-  if (!db || typeof db !== 'object' || !Array.isArray(db.orders ?? [])) throw new Error('not an Order Tracker file')
+  if (!db || typeof db !== 'object' || !Array.isArray(db.orders ?? [])) throw new Error('not a Summit Order Tracking file')
   return db
 }
 
