@@ -293,3 +293,19 @@ test('repairTracking clears bad saved UPS numbers and leaves good ones', () => {
   assert.equal(fixed.find(o => o.orderNumber === 'A60002')!.trackingNumber, undefined)
   assert.equal(fixed.find(o => o.orderNumber === 'A60001')!.trackingNumber, '1Z999AA10123456784')
 })
+
+test('UPS: letters in the service code (Target) are still UPS, not Unknown/DHL', () => {
+  const n = '1ZAB1234CD56789012' // valid check digit, letters in positions 9-10
+  assert.deepEqual(extractTracking(`Tracking number: ${n}`), { trackingNumber: n, carrier: 'UPS' })
+  assert.deepEqual(extractTracking(`Shipped with DHL eCommerce partner. Tracking number: ${n}`), { trackingNumber: n, carrier: 'UPS' })
+  assert.equal(extractTracking('Tracking number: 1ZAB1234CD56789013')?.carrier, 'Unknown') // bad check digit: not called UPS
+})
+
+test('repairTracking relabels real UPS numbers saved under another carrier', () => {
+  const tgt = { fromName: 'Target', fromAddress: 'orders@oe.target.com' }
+  const p = parseEmail(mk({ ...tgt, messageId: 'v1', subject: 'Your order #A70001 has shipped' }))!
+  const saved = mergeIntoOrders([], [p]).map(o => ({ ...o, trackingNumber: '1ZAB1234CD56789012', carrier: 'Unknown' }))
+  assert.equal(repairTracking(saved)[0].carrier, 'UPS')
+  const dhl = saved.map(o => ({ ...o, carrier: 'DHL' }))
+  assert.equal(repairTracking(dhl)[0].carrier, 'UPS')
+})
