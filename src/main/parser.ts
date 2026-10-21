@@ -1,4 +1,4 @@
-import type { Order, OrderEvent, OrderStatus } from '../shared/types'
+import type { Order, OrderEvent, OrderStatus, ShipTo } from '../shared/types'
 
 /** Minimal email shape the parser needs (decoupled from IMAP/mailparser). */
 export interface RawEmail {
@@ -19,6 +19,7 @@ export interface ParsedEmail {
   messageId: string
   total?: string
   items?: number
+  shipTo?: ShipTo
   trackingNumber?: string
   carrier?: string
   account?: string
@@ -28,7 +29,7 @@ export interface ParsedEmail {
  * Bump whenever detection rules change. Sync keys its "already scanned" cache
  * on this, so every inbox is re-checked once with the new rules (no Reset needed).
  */
-export const PARSER_VERSION = 6
+export const PARSER_VERSION = 7
 
 /** Cheap subject filter so sync only downloads full bodies of likely order emails. */
 export const SUBJECT_HINT = /order|ship|deliver|cancel|refund|return|package|purchase|receipt|track|arriv|dispatch|confirm|thank|invoice|on (?:its|the) way|out for/i
@@ -157,6 +158,42 @@ export function extractItemCount(retailer: string, text: string): number | undef
   return sum || undefined
 }
 
+// ---------- shipping address ----------
+const SHIP_HEADING = /\b(?:shipping address|ship(?:ping|ped)? to|deliver(?:ing|ed)? to|delivery address|sent to)\b[ \t]*:?/gi
+// Text after these isn't the shipping address any more.
+const SHIP_STOP = /\b(?:billing|bill to|payment|order summary|order details|subtotal|items? in (?:this|your) order|phone|email)\b/i
+// "TX 78701", "Austin TX 78701-1234", optionally followed by the country.
+const STATE_ZIP = /^(?:(.*?[A-Za-z].*?)\s+)?([A-Z]{2})\s+(\d{5})(?:-\d{4})?(?:\s+(?:US|USA|United States))?$/
+const STREET = /^(?:\d+[A-Za-z]?\s+\S|P\.?\s*O\.?\s*Box\b)/i
+
+/**
+ * Shipping address from text like "Shipping Address\nJane Doe\n123 Main St\nAustin, TX 78701"
+ * or "Ship to: Jane Doe, 123 Main St, Austin, TX 78701". Only US addresses; billing ignored.
+ */
+export function extractShipTo(text: string): ShipTo | undefined {
+  for (const h of text.matchAll(SHIP_HEADING)) {
+    let chunk = text.slice(h.index! + h[0].length, h.index! + h[0].length + 400)
+    const stop = chunk.search(SHIP_STOP)
+    if (stop >= 0) chunk = chunk.slice(0, stop)
+    // One piece per line and per comma: "Austin, TX 78701" -> "Austin", "TX 78701".
+    const parts = chunk.split(/\r?\n/).flatMap(l => l.split(',')).map(p => p.replace(/\s+/g, ' ').trim()).filter(Boolean)
+    for (let i = 0; i < parts.length && i < 8; i++) {
+      const m = parts[i].match(STATE_ZIP)
+      if (!m) continue
+      const cityAt = m[1] ? i : i - 1
+      const city = m[1] ?? parts[i - 1]
+      if (!city || cityAt < 1) break
+      const before = parts.slice(0, cityAt)
+      const streetAt = before.findIndex(p => STREET.test(p))
+      if (streetAt < 0) break
+      // Only the line right before the street: "shipped to the address below / Jane Doe" -> "Jane Doe".
+      const name = streetAt > 0 ? before[streetAt - 1] : undefined
+      return { ...(name ? { name } : {}), street: before.slice(streetAt).join(', '), city, state: m[2], zip: m[3] }
+    }
+  }
+  return undefined
+}
+
 const GENERIC_SENDER = /^(no-?reply|do-?not-?reply|orders?|shipping|ship-confirm|auto-confirm|notifications?|info|support|updates?|store-news|mail|email)$/i
 
 export function extractRetailer(fromName: string, fromAddress: string): string {
@@ -205,6 +242,7 @@ export function explainEmail(e: RawEmail): Explanation {
     messageId: e.messageId,
     total: extractTotal(body),
     items: extractItemCount(retailer, body),
+    shipTo: extractShipTo(body),
     trackingNumber: tracking?.trackingNumber,
     carrier: tracking?.carrier
   }
@@ -250,6 +288,7 @@ export function mergeIntoOrders(existing: Order[], parsed: ParsedEmail[]): Order
     o.total ??= p.total
     // Shipping emails for a split order list only part of it: keep the largest count seen.
     if (p.items) o.items = Math.max(o.items ?? 0, p.items)
+    o.shipTo ??= p.shipTo
     if (p.trackingNumber) { o.trackingNumber = p.trackingNumber; o.carrier = p.carrier }
     if (!o.manual) o.status = currentStatus(o.events)
   }
@@ -308,6 +347,7 @@ export function repairOrderNumbers(orders: Order[]): Order[] {
     prev.lastUpdate = prev.events[prev.events.length - 1].date
     prev.total ??= o.total
     if (o.items) prev.items = Math.max(prev.items ?? 0, o.items)
+    prev.shipTo ??= o.shipTo
     if (!prev.trackingNumber && o.trackingNumber) { prev.trackingNumber = o.trackingNumber; prev.carrier = o.carrier }
     if (o.manual && !prev.manual) { prev.manual = true; prev.status = o.status }
     if (!prev.manual) prev.status = currentStatus(prev.events)

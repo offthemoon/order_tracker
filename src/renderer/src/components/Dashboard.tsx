@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { CLOSED_STATUSES, type Order, type OrderStatus, type PublicAccount } from '@shared/types'
+import { CLOSED_STATUSES, type Order, type OrderStatus, type PublicAccount, type ShipTo } from '@shared/types'
 import SummaryCard from './SummaryCard'
 import { STATUS_META, STATUS_ORDER, daysAgo, fmtDate, fmtMoney, parseMoney, trackingUrl } from '../status'
 
@@ -37,6 +37,18 @@ const loadReveal = (): boolean => {
   try { return localStorage.getItem(REVEAL_KEY) === '1' } catch { return false }
 }
 
+// Addresses are hidden unless the user has chosen to show them.
+const ADDR_KEY = 'order-tracker.revealAddresses'
+const loadShowAddr = (): boolean => {
+  try { return localStorage.getItem(ADDR_KEY) === '1' } catch { return false }
+}
+
+/** Same address written slightly differently ("Street" vs "St", "#4" vs "Apt 4") gets one key. */
+const ABBR: Record<string, string> = { street: 'st', avenue: 'ave', road: 'rd', drive: 'dr', boulevard: 'blvd', lane: 'ln', court: 'ct', place: 'pl', apartment: 'apt', suite: 'ste', unit: 'apt', '#': 'apt' }
+const addressKey = (a: ShipTo) =>
+  (a.street.toLowerCase().replace(/#/g, ' # ').replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean).map(w => ABBR[w] ?? w).join(' ')) + ' ' + a.zip
+const fmtAddress = (a: ShipTo) => `${a.street}, ${a.city}`
+
 /** Covers all but the last 2 characters: "912003456789" -> "••••89". */
 const maskOrderNumber = (n: string) => (n.length > 2 ? '••••' + n.slice(-2) : '•'.repeat(n.length))
 
@@ -61,6 +73,8 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
   const [bulkStatus, setBulkStatus] = useState<OrderStatus | 'auto' | ''>('')
   const [reveal, setRevealState] = useState<boolean>(loadReveal)
   const [showSummary, setShowSummary] = useState(false)
+  const [showAddr, setShowAddrState] = useState<boolean>(loadShowAddr)
+  const [addr, setAddr] = useState<string>('all')
   const lastClicked = useRef<string | null>(null)
 
   const setReveal = (v: boolean) => {
@@ -71,13 +85,35 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
   // Email subjects usually repeat the order number, so cover it there too.
   const subj = (s: string, n: string) => (reveal || !n ? s : s.split(n).join(maskOrderNumber(n)))
 
+  const setShowAddr = (v: boolean) => {
+    setShowAddrState(v)
+    try { localStorage.setItem(ADDR_KEY, v ? '1' : '0') } catch { /* storage unavailable: fine */ }
+  }
+  // Every address seen, most-used first. While hidden, each is shown as "Address 1", "Address 2"…
+  const addresses = useMemo(() => {
+    const m = new Map<string, { ship: ShipTo; count: number }>()
+    for (const o of allOrders) {
+      if (!o.shipTo) continue
+      const k = addressKey(o.shipTo)
+      const e = m.get(k) ?? { ship: o.shipTo, count: 0 }
+      e.count++
+      m.set(k, e)
+    }
+    return [...m].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0])).map(([key, e], i) => ({ key, ...e, n: i + 1 }))
+  }, [allOrders])
+  const addrLabel = (key: string, ship: ShipTo) =>
+    showAddr ? fmtAddress(ship) : `Address ${addresses.find(a => a.key === key)?.n ?? '?'}`
+  // A filter for an address that no longer exists falls back to all.
+  const addrFilter = addresses.some(a => a.key === addr) ? addr : 'all'
+
   const multi = accounts.length > 1
   const userOf = (id: string) => accounts.find(a => a.id === id)?.user ?? 'removed account'
-  // Everything below (tiles, bar, table) respects the account filter.
-  // Everything below (tiles, value, bar, table) respects the account and date filters.
+  // Everything below (tiles, value, bar, table, summary) respects the account, address and date filters.
   const inAccount = useMemo(
-    () => (acct === 'all' ? allOrders : allOrders.filter(o => o.accounts?.includes(acct))),
-    [allOrders, acct]
+    () => allOrders.filter(o =>
+      (acct === 'all' || o.accounts?.includes(acct)) &&
+      (addrFilter === 'all' || (o.shipTo && addressKey(o.shipTo) === addrFilter))),
+    [allOrders, acct, addrFilter]
   )
   const orders = useMemo(() => {
     const since = rangeStart(range)
@@ -102,7 +138,9 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
       if (filter === 'active' && CLOSED_STATUSES.includes(o.status)) return false
       if (filter !== 'all' && filter !== 'active' && o.status !== filter) return false
       if (!needle) return true
-      return [o.orderNumber, o.retailer, o.trackingNumber ?? ''].some(v => v.toLowerCase().includes(needle))
+      const a = o.shipTo
+      return [o.orderNumber, o.retailer, o.trackingNumber ?? '', a ? `${a.name ?? ''} ${a.street} ${a.city} ${a.state} ${a.zip}` : '']
+        .some(v => v.toLowerCase().includes(needle))
     })
   }, [orders, filter, q])
 
@@ -184,13 +222,22 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
               {accounts.map(a => <option key={a.id} value={a.id}>{a.user}</option>)}
             </select>
           )}
+          {addresses.length > 1 && (
+            <select className="acct-select" aria-label="Shipping address" value={addrFilter} onChange={e => { setAddr(e.target.value); clearPicked() }}>
+              <option value="all">All addresses</option>
+              {addresses.map(a => <option key={a.key} value={a.key}>{addrLabel(a.key, a.ship)} ({a.count})</option>)}
+            </select>
+          )}
           <button className={`toggle ${showSummary ? 'on' : ''}`} aria-haspopup="dialog" title="Total spent and top stores for this range" onClick={() => setShowSummary(true)}>
             <ChartIcon />Summary
           </button>
           <button className={`toggle ${reveal ? 'on' : ''}`} aria-pressed={reveal} title={reveal ? 'Cover order numbers' : 'Show full order numbers'} onClick={() => setReveal(!reveal)}>
             <EyeIcon open={reveal} />Order #s
           </button>
-          <input className="search"placeholder="Search order #, store, tracking…" value={q} onChange={e => setQ(e.target.value)} />
+          <button className={`toggle ${showAddr ? 'on' : ''}`} aria-pressed={showAddr} title={showAddr ? 'Hide shipping addresses' : 'Show shipping addresses'} onClick={() => setShowAddr(!showAddr)}>
+            <EyeIcon open={showAddr} />Addresses
+          </button>
+          <input className="search" placeholder="Search order #, store, tracking, address…" value={q} onChange={e => setQ(e.target.value)} />
         </div>
       </div>
 
@@ -230,7 +277,7 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
           ) : (
             <table>
               <thead>
-                <tr><th className="cb"><input type="checkbox" aria-label="Select all" checked={allPicked} ref={el => { if (el) el.indeterminate = picked.length > 0 && !allPicked }} onChange={toggleAll} /></th><th>Store</th><th>Order #</th><th>Status</th><th>Ordered</th><th>Last update</th><th>Total</th>{multi && <th>Account</th>}<th>Tracking</th></tr>
+                <tr><th className="cb"><input type="checkbox" aria-label="Select all" checked={allPicked} ref={el => { if (el) el.indeterminate = picked.length > 0 && !allPicked }} onChange={toggleAll} /></th><th>Store</th><th>Order #</th><th>Status</th><th>Ordered</th><th>Last update</th><th>Total</th><th>Ship to</th>{multi && <th>Account</th>}<th>Tracking</th></tr>
               </thead>
               <tbody>
                 {shown.map(o => (
@@ -244,6 +291,9 @@ export default function Dashboard({ orders: allOrders, accounts, onSetStatus, on
                     <td>{fmtDate(o.firstSeen)}</td>
                     <td className="muted">{daysAgo(o.lastUpdate)}</td>
                     <td>{o.total ?? '—'}</td>
+                    <td className={`ship small ${showAddr ? '' : 'muted'}`} title={showAddr && o.shipTo ? `${o.shipTo.name ? o.shipTo.name + ', ' : ''}${o.shipTo.street}, ${o.shipTo.city}, ${o.shipTo.state} ${o.shipTo.zip}` : undefined}>
+                      {o.shipTo ? addrLabel(addressKey(o.shipTo), o.shipTo) : '—'}
+                    </td>
                     {multi && <td className="muted small">{(o.accounts ?? []).map(userOf).join(', ')}</td>}
                     <td className="mono small">{o.trackingNumber ? `${o.carrier} · ${o.trackingNumber}` : '—'}</td>
                   </tr>

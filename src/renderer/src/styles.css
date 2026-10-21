@@ -192,3 +192,7 @@ tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
 }
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; transform: scale(.96); } }
+
+/* shipping address column */
+td.ship { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.filters { flex-wrap: wrap; justify-content: flex-end; }

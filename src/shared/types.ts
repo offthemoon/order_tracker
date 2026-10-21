@@ -40,6 +40,15 @@ export interface OrderEvent {
   account?: string    // ImapAccount.id it was found in
 }
 
+/** Shipping address read from an order email (US format). */
+export interface ShipTo {
+  name?: string
+  street: string      // may hold two lines joined with ", " (e.g. "123 Main St, Apt 4")
+  city: string
+  state: string
+  zip: string
+}
+
 export interface Order {
   id: string          // `${retailer}:${orderNumber}`
   orderNumber: string
@@ -50,6 +59,7 @@ export interface Order {
   total?: string
   /** Number of items, for stores whose emails list quantities. */
   items?: number
+  shipTo?: ShipTo
   trackingNumber?: string
   carrier?: string
   /** True when the user set the status by hand; sync won't overwrite it. */

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseEmail, mergeIntoOrders, removeAccount, setStatuses, cleanOrderNumber, repairOrderNumbers, explainEmail, SUBJECT_HINT, detectStatus, extractRetailer, extractItemCount, extractTracking, repairTracking, type RawEmail } from '../src/main/parser'
+import { parseEmail, mergeIntoOrders, removeAccount, setStatuses, cleanOrderNumber, repairOrderNumbers, explainEmail, SUBJECT_HINT, detectStatus, extractRetailer, extractItemCount, extractTracking, repairTracking, extractShipTo, type RawEmail } from '../src/main/parser'
 
 const mk = (over: Partial<RawEmail>): RawEmail => ({
   messageId: Math.random().toString(36),
@@ -308,4 +308,33 @@ test('repairTracking relabels real UPS numbers saved under another carrier', () 
   assert.equal(repairTracking(saved)[0].carrier, 'UPS')
   const dhl = saved.map(o => ({ ...o, carrier: 'DHL' }))
   assert.equal(repairTracking(dhl)[0].carrier, 'UPS')
+})
+
+// Fake addresses only: this file is public.
+test('ship-to: heading, name, street lines, City, ST ZIP', () => {
+  const text = 'Thanks for your order!\nShipping Address\nJane Doe\n123 Main St\nApt 4\nAustin, TX 78701\nUnited States\nBilling Address\nJane Doe\n9 Other Rd\nDallas, TX 75001'
+  assert.deepEqual(extractShipTo(text), { name: 'Jane Doe', street: '123 Main St, Apt 4', city: 'Austin', state: 'TX', zip: '78701' })
+})
+
+test('ship-to: single line, ZIP+4, other headings', () => {
+  assert.deepEqual(extractShipTo('Ship to: Jane Doe, 500 Oak Ave Unit 2, San Jose, CA 95112-1234'),
+    { name: 'Jane Doe', street: '500 Oak Ave Unit 2', city: 'San Jose', state: 'CA', zip: '95112' })
+  assert.deepEqual(extractShipTo('Delivering to:\nJohn Smith\n42 Elm Rd\nPortland OR 97201'),
+    { name: 'John Smith', street: '42 Elm Rd', city: 'Portland', state: 'OR', zip: '97201' })
+  assert.equal(extractShipTo('Your order has shipped to the address below\nJohn Smith\n42 Elm Rd\nPortland, OR 97201')?.name, 'John Smith')
+})
+
+test('ship-to: boilerplate and billing-only emails give nothing', () => {
+  assert.equal(extractShipTo('Need to update your shipping address? Visit your account.'), undefined)
+  assert.equal(extractShipTo('Billing Address\nJane Doe\n123 Main St\nAustin, TX 78701'), undefined)
+  // A footer link mentioning shipping, then the real address further down.
+  assert.equal(extractShipTo('Questions about ship to store? Help center.\n\nShipping address:\nJane Doe\n1 Pine St\nBoise, ID 83702')?.zip, '83702')
+})
+
+test('ship-to is saved on the order', () => {
+  const pkc = { fromName: 'Pokémon Center', fromAddress: 'orders@em.pokemoncenter.com' }
+  const p = parseEmail(mk({ ...pkc, subject: 'Thanks for shopping at Pokémon Center!', text: 'Order Number: P009999999\nShipping Address\nJane Doe\n123 Main St\nAustin, TX 78701' }))!
+  const later = parseEmail(mk({ ...pkc, messageId: 's2', subject: 'Your order #P009999999 has shipped', text: '' }))!
+  const [o] = mergeIntoOrders([], [p, later])
+  assert.equal(o.shipTo?.street, '123 Main St')
 })
