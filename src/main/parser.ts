@@ -8,6 +8,11 @@ export interface RawEmail {
   fromAddress: string
   subject: string
   text: string
+  /**
+   * The HTML part as text, when the email has both. Some stores send a plain-text
+   * part that leaves out the order details, so this is the fallback body.
+   */
+  htmlText?: string
 }
 
 export interface ParsedEmail {
@@ -29,7 +34,7 @@ export interface ParsedEmail {
  * Bump whenever detection rules change. Sync keys its "already scanned" cache
  * on this, so every inbox is re-checked once with the new rules (no Reset needed).
  */
-export const PARSER_VERSION = 7
+export const PARSER_VERSION = 8
 
 /** Cheap subject filter so sync only downloads full bodies of likely order emails. */
 export const SUBJECT_HINT = /order|ship|deliver|cancel|refund|return|package|purchase|receipt|track|arriv|dispatch|confirm|thank|invoice|on (?:its|the) way|out for/i
@@ -196,7 +201,25 @@ export function extractShipTo(text: string): ShipTo | undefined {
 
 const GENERIC_SENDER = /^(no-?reply|do-?not-?reply|orders?|shipping|ship-confirm|auto-confirm|notifications?|info|support|updates?|store-news|mail|email)$/i
 
+/** Store names that arrive spelled several ways, or from senders that don't name the store. */
+const CANONICAL_RETAILERS: [string, RegExp][] = [
+  ['Pokémon Center', /pok[eé]mon\s*center/i]
+]
+
+/**
+ * Pokémon Center order numbers ("P001234567") with the store named in the body.
+ * Their delivery emails come from varying senders, so the sender can't name the store.
+ */
+const PKC_ORDER = /^P\d{9}$/
+const PKC_BODY = /pok[eé]mon\s*center/i
+
 export function extractRetailer(fromName: string, fromAddress: string): string {
+  const raw = rawRetailer(fromName, fromAddress)
+  for (const [name, re] of CANONICAL_RETAILERS) if (re.test(raw) || re.test(fromAddress.replace(/[^a-z]/gi, ''))) return name
+  return raw
+}
+
+function rawRetailer(fromName: string, fromAddress: string): string {
   const name = fromName.replace(/["']/g, '').replace(/\b(orders?|shipping|notifications?|customer service|no-?reply)\b/gi, '').replace(/[.,|-]+\s*$/, '').trim()
   if (name && !GENERIC_SENDER.test(name) && !name.includes('@')) return name.replace(/\.com$/i, '')
   const domain = (fromAddress.split('@')[1] ?? '').toLowerCase()
@@ -218,11 +241,18 @@ export interface Explanation {
 
 /** Runs the parser and says why it accepted or skipped the email. */
 export function explainEmail(e: RawEmail): Explanation {
-  const body = e.text.slice(0, 20000)
+  let body = e.text.slice(0, 20000)
+  let found = findOrderNumber(e.subject, body)
+  // Plain-text part without the order details: read the HTML part instead.
+  if (!found && e.htmlText) {
+    const alt = e.htmlText.slice(0, 20000)
+    const altFound = findOrderNumber(e.subject, alt)
+    if (altFound) { body = alt; found = altFound }
+  }
   const passesPrefilter = SUBJECT_HINT.test(e.subject)
   const status = detectStatus(e.subject, body)
-  const found = findOrderNumber(e.subject, body)
-  const retailer = extractRetailer(e.fromName, e.fromAddress)
+  let retailer = extractRetailer(e.fromName, e.fromAddress)
+  if (found && PKC_ORDER.test(found.orderNumber) && PKC_BODY.test(body)) retailer = 'Pokémon Center'
   const base = { passesPrefilter, status, orderNumber: found?.orderNumber ?? null, orderNumberFrom: found?.where, retailer }
 
   if (!found) return { ...base, result: null, reason: 'No order number found in the subject or body.' }

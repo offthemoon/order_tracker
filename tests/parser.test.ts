@@ -338,3 +338,42 @@ test('ship-to is saved on the order', () => {
   const [o] = mergeIntoOrders([], [p, later])
   assert.equal(o.shipTo?.street, '123 Main St')
 })
+
+// Copied from a real Pokémon Center delivery email (personal details removed).
+const PKC_DELIVERED = `Your package has been delivered!
+Hi Jane,
+Great news!
+Your package has been delivered to:
+123 Main St,
+Austin,
+TX
+78701
+Thank you for shopping with us!
+Sincerely,
+The Pokémon Center Team
+Fulfillment Details
+
+Fulfillment ID: 1234567
+Order Number: P001234567
+Date Ordered: Oct 15, 2026`
+
+test('Pokémon Center delivery email updates the order, whatever the sender', () => {
+  const pkc = { fromName: 'Pokémon Center', fromAddress: 'orders@em.pokemoncenter.com' }
+  const placed = parseEmail(mk({ ...pkc, subject: 'Thank you for shopping at PokemonCenter.com!', text: 'Order Number: P001234567\nThank you for your order' }))!
+  for (const sender of [pkc, { fromName: 'Pokemon Center', fromAddress: 'noreply@pokemoncenter.com' }, { fromName: '', fromAddress: 'no-reply@notify.example.com' }]) {
+    const p = parseEmail(mk({ ...sender, subject: 'Your package has been delivered!', text: PKC_DELIVERED }))
+    assert.equal(p?.status, 'delivered')
+    assert.equal(p?.orderNumber, 'P001234567')
+    assert.equal(p?.retailer, 'Pokémon Center')
+    const [o] = mergeIntoOrders([], [placed, p!])
+    assert.equal(o.status, 'delivered')
+    assert.equal(o.events.length, 2)
+  }
+})
+
+test('order details only in the HTML part: falls back to it', () => {
+  const pkc = { fromName: 'Pokémon Center', fromAddress: 'orders@em.pokemoncenter.com' }
+  const p = parseEmail(mk({ ...pkc, subject: 'Your package has been delivered!', text: 'Your package has been delivered! View this email in your browser.', htmlText: PKC_DELIVERED }))
+  assert.equal(p?.status, 'delivered')
+  assert.equal(p?.orderNumber, 'P001234567')
+})

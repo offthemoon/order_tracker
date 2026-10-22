@@ -136,13 +136,15 @@ async function syncFolder(
 async function toRawEmail(source: Buffer, fallbackId: string): Promise<RawEmail> {
   const mail = await simpleParser(source)
   const from = mail.from?.value[0]
+  const html = typeof mail.html === 'string' ? htmlToText(mail.html) : ''
   return {
     messageId: mail.messageId || fallbackId,
     date: mail.date ?? new Date(),
     fromName: from?.name ?? '',
     fromAddress: from?.address ?? '',
     subject: mail.subject ?? '',
-    text: mail.text || (typeof mail.html === 'string' ? htmlToText(mail.html) : '')
+    text: mail.text || html,
+    htmlText: mail.text && html ? html : undefined
   }
 }
 
